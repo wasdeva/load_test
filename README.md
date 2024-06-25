@@ -6,7 +6,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
 # Constants
-API_URL = "http://your-ansible-tower-url/api/v2"
+API_URL = "https://your-ansible-tower-url/api/v2"  # Adjust the API URL
 TOKEN = "your-token"  # Replace this with your actual token
 JOB_TEMPLATE_ID = your_job_template_id  # Replace with your job template ID
 MAX_WORKERS = 30  # Number of parallel tasks
@@ -33,24 +33,23 @@ def create_and_launch(server):
         headers=headers,
         verify=False  # Disable SSL certificate verification
     )
-    inventory_id = inventory_response.json()['id']
-    
+    inventory_data = inventory_response.json()  # Parse JSON only once
+    print("Inventory response JSON:", inventory_data)  # Debug print
+
+    if 'results' in inventory_data and inventory_data['results']:  # Check if results key exists and is not empty
+        inventory_id = inventory_data['results'][0]['id']  # Access the first result's id
+    else:
+        print("Failed to create inventory:", inventory_data.get('detail', 'No detail available'))
+        return  # Handle the error appropriately
+
     # Add host to inventory
-    session.post(
+    host_response = session.post(
         f"{API_URL}/hosts/",
         json={"name": server, "inventory": inventory_id},
         headers=headers,
         verify=False  # Disable SSL certificate verification
     )
-    
-    # Launch a job using a job template
-    job_response = session.post(
-        f"{API_URL}/job_templates/{JOB_TEMPLATE_ID}/launch/",
-        json={"inventory": inventory_id},
-        headers=headers,
-        verify=False  # Disable SSL certificate verification
-    )
-    return f"Launched job for {server}: {job_response.json()}"
+    return f"Launched job for {server} with inventory ID {inventory_id}: {host_response.json()}"
 
 # Main script
 def main(file_path):
