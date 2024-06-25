@@ -29,7 +29,7 @@ def create_and_launch(server):
     inventory_payload = {
         "name": f"load_test_{server}_{current_time}",
         "description": "Generated inventory for load testing.",
-        "organization": 1,  # Replace with the actual organization ID
+        "organization": 4,  # Using the organization ID for 'load_test'
         "variables": "{}",
         "prevent_instance_group_fallback": False
     }
