@@ -1,6 +1,5 @@
 import requests
 import json
-from datetime import datetime
 import warnings
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -28,8 +27,8 @@ headers = {
 
 # Function to handle creation of inventory and launching job
 def handle_inventory_and_job(server):
-    inventory_name = f"load_test_{server}"  # Inventory name format
-    inventory_description = f"Auto-created inventory for load testing with server: {server}"
+    inventory_name = f"load_test_{server}"
+    inventory_description = f"Auto-created inventory for server: {server}"
     organization_id = 4  # Adjust as per your organization ID
 
     # Create Inventory
@@ -58,7 +57,9 @@ def handle_inventory_and_job(server):
 
 # Main execution
 if __name__ == "__main__":
-    servers = ["server1", "server2", "server3", "..."]  # List of servers
+    with open("servers.txt", "r") as file:
+        servers = [line.strip() for line in file if line.strip()]
+
     num_workers = min(MAX_WORKERS, len(servers))
 
     # Using ThreadPoolExecutor to manage parallel execution
