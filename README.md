@@ -10,7 +10,7 @@ import concurrent.futures
 API_URL = "https://your.tower.server/api/v2"
 TOKEN = 'your-token'  # Replace with your OAuth token
 JOB_TEMPLATE_ID = 'your_job_template_id'  # Replace with your job template ID
-MAX_WORKERS = 10  # Max concurrent workers
+MAX_WORKERS = 30  # Maximum number of workers for large operations
 
 # Suppress only the InsecureRequestWarning
 warnings.simplefilter('ignore', requests.packages.urllib3.exceptions.InsecureRequestWarning)
@@ -26,53 +26,43 @@ headers = {
     'Content-Type': 'application/json'
 }
 
-# Function to find or create inventory
-def find_or_create_inventory(name, description, organization):
-    # Try to find the inventory
-    response = session.get(f"{API_URL}/inventories/?name={name}", headers=headers, verify=False)
-    if response.status_code == 200:
-        results = response.json().get('results', [])
-        if results:
-            return results[0]['id']
+# Function to handle creation of inventory and launching job
+def handle_inventory_and_job(server):
+    inventory_name = f"load_test_{server}"  # Inventory name format
+    inventory_description = f"Auto-created inventory for load testing with server: {server}"
+    organization_id = 4  # Adjust as per your organization ID
 
-    # Create the inventory if not found
+    # Create Inventory
     payload = {
-        "name": name,
-        "description": description,
-        "organization": organization
+        "name": inventory_name,
+        "description": inventory_description,
+        "organization": organization_id
     }
-    response = session.post(f"{API_URL}/inventories/", headers=headers, json=payload, verify=False)
-    if response.status_code in [200, 201]:
-        return response.json()['id']
-    else:
-        raise Exception(f"Failed to find or create inventory: {response.text}")
+    inventory_response = session.post(f"{API_URL}/inventories/", headers=headers, json=payload, verify=False)
+    if inventory_response.status_code in [200, 201]:
+        inventory_id = inventory_response.json()['id']
+        print(f"Inventory created with ID: {inventory_id} for server: {server}")
 
-# Function to launch a job using a job template
-def launch_job_with_inventory(job_template_id, inventory_id, extra_vars=None):
-    payload = {
-        "inventory": inventory_id,
-        "extra_vars": json.dumps(extra_vars) if extra_vars else {}
-    }
-    response = session.post(f"{API_URL}/job_templates/{job_template_id}/launch/", headers=headers, json=payload, verify=False)
-    if response.status_code in [200, 201, 202]:
-        return response.json()
+        # Launch Job
+        job_payload = {
+            "inventory": inventory_id,
+            "extra_vars": json.dumps({"server": server})  # Example of passing extra vars
+        }
+        job_response = session.post(f"{API_URL}/job_templates/{JOB_TEMPLATE_ID}/launch/", headers=headers, json=job_payload, verify=False)
+        if job_response.status_code in [200, 201, 202]:
+            return f"Job launched successfully for server {server} with job ID {job_response.json()['id']}"
+        else:
+            return f"Failed to launch job for server {server}: {job_response.text}"
     else:
-        raise Exception(f"Failed to launch job: {response.text}")
+        return f"Failed to create inventory for server {server}: {inventory_response.text}"
 
 # Main execution
 if __name__ == "__main__":
-    inventory_name = "Load Test Inventory " + datetime.now().strftime("%Y-%m-%d")  # Using only date
-    inventory_description = "Auto-created inventory for load testing"
-    organization_id = 4  # Organization ID for 'load_test'
+    servers = ["server1", "server2", "server3", "..."]  # List of servers
+    num_workers = min(MAX_WORKERS, len(servers))
 
-    # Parallel execution of inventory creation and job launch
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = []
-        for _ in range(MAX_WORKERS):  # Adjust as needed for your scenario
-            futures.append(executor.submit(find_or_create_inventory, inventory_name, inventory_description, organization_id))
-
+    # Using ThreadPoolExecutor to manage parallel execution
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
+        futures = [executor.submit(handle_inventory_and_job, server) for server in servers]
         for future in concurrent.futures.as_completed(futures):
-            inventory_id = future.result()
-            print(f"Using Inventory ID: {inventory_id}")
-            job_response = launch_job_with_inventory(JOB_TEMPLATE_ID, inventory_id, extra_vars={"example_var": "value"})
-            print("Job Launched:", job_response)
+            print(future.result())
