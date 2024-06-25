@@ -26,18 +26,18 @@ headers = {
     'Content-Type': 'application/json'
 }
 
-# Function to find or create inventory and add a host to it
+# Function to find or create inventory and add a host to it if it does not already exist
 def find_or_create_inventory_and_add_host(server):
     inventory_name = f"load_test_{server}"
-    url = f"{API_URL}/inventories/?name={inventory_name}"
-    response = session.get(url, headers=headers, verify=False)
+    # Check if inventory exists
+    response = session.get(f"{API_URL}/inventories/?name={inventory_name}", headers=headers, verify=False)
     results = response.json().get('results', [])
 
     if results:
         inventory_id = results[0]['id']
         print(f"Using existing inventory ID {inventory_id} for server: {server}")
     else:
-        # If inventory does not exist, create it
+        # Create inventory if it does not exist
         payload = {
             "name": inventory_name,
             "description": f"Auto-created inventory for server: {server}",
@@ -50,15 +50,18 @@ def find_or_create_inventory_and_add_host(server):
         else:
             raise Exception(f"Failed to create inventory for server {server}: {response.text}")
 
-    # Add the server as a host to the inventory
-    host_payload = {
-        "name": server,
-        "inventory": inventory_id,
-        "enabled": True
-    }
-    host_response = session.post(f"{API_URL}/hosts/", headers=headers, json=host_payload, verify=False)
-    if host_response.status_code not in [200, 201]:
-        raise Exception(f"Failed to add host {server} to inventory ID {inventory_id}: {host_response.text}")
+    # Check if host exists in the inventory
+    host_response = session.get(f"{API_URL}/hosts/?name={server}&inventory={inventory_id}", headers=headers, verify=False)
+    if not host_response.json().get('results'):
+        # Add the server as a host to the inventory if it does not exist
+        host_payload = {
+            "name": server,
+            "inventory": inventory_id,
+            "enabled": True
+        }
+        host_response = session.post(f"{API_URL}/hosts/", headers=headers, json=host_payload, verify=False)
+        if host_response.status_code not in [200, 201]:
+            raise Exception(f"Failed to add host {server} to inventory ID {inventory_id}: {host_response.text}")
     
     return inventory_id
 
@@ -90,5 +93,4 @@ if __name__ == "__main__":
 
         for future, server in futures:
             inventory_id = future.result()
-            job_result = launch_job(inventory_id, server)
-            print(job_result)
+            job
