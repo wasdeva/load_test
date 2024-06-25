@@ -6,9 +6,9 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
 # Constants
-API_URL = "https://your-ansible-tower-url/api/v2"  # Adjust the API URL
-TOKEN = "your-token"  # Replace this with your actual token
-JOB_TEMPLATE_ID = your_job_template_id  # Replace with your job template ID
+API_URL = "https://your-ansible-tower-url/api/v2"
+TOKEN = "your-token"  # Replace with your actual token
+JOB_TEMPLATE_ID = your_job_template_id  # Replace with your actual job template ID
 MAX_WORKERS = 30  # Number of parallel tasks
 
 # Suppress only the InsecureRequestWarning
@@ -25,22 +25,31 @@ def create_and_launch(server):
     headers = {"Authorization": f"Bearer {TOKEN}"}
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")  # Generates a timestamp
 
+    # Prepare the JSON payload with all required and optional fields
+    inventory_payload = {
+        "name": f"load_test_{server}_{current_time}",
+        "description": "Generated inventory for load testing.",
+        "organization": 1,  # Replace with the actual organization ID
+        "variables": "{}",
+        "prevent_instance_group_fallback": False
+    }
+
     # Create inventory with timestamp and load_test label
-    inventory_name = f"load_test_{server}_{current_time}"
     inventory_response = session.post(
         f"{API_URL}/inventories/",
-        json={"name": inventory_name},
+        json=inventory_payload,
         headers=headers,
         verify=False  # Disable SSL certificate verification
     )
-    inventory_data = inventory_response.json()  # Parse JSON only once
+    inventory_data = inventory_response.json()
     print("Inventory response JSON:", inventory_data)  # Debug print
 
-    if 'results' in inventory_data and inventory_data['results']:  # Check if results key exists and is not empty
-        inventory_id = inventory_data['results'][0]['id']  # Access the first result's id
+    if inventory_response.status_code == 201:
+        inventory_id = inventory_data['id']
     else:
-        print("Failed to create inventory:", inventory_data.get('detail', 'No detail available'))
-        return  # Handle the error appropriately
+        error_message = inventory_data.get('detail', 'Failed to create inventory with no specific error detail.')
+        print("Failed to create inventory:", error_message)
+        return error_message
 
     # Add host to inventory
     host_response = session.post(
@@ -49,7 +58,10 @@ def create_and_launch(server):
         headers=headers,
         verify=False  # Disable SSL certificate verification
     )
-    return f"Launched job for {server} with inventory ID {inventory_id}: {host_response.json()}"
+    if host_response.status_code != 201:
+        print("Failed to add host:", host_response.json())
+        return "Failed to add host"
+    return f"Launched job for {server} with inventory ID {inventory_id}"
 
 # Main script
 def main(file_path):
