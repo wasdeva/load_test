@@ -1,6 +1,5 @@
 import requests
 import json
-from datetime import datetime
 import warnings
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -27,24 +26,33 @@ headers = {
     'Content-Type': 'application/json'
 }
 
-# Function to create inventory and add hosts
+# Function to create inventory and add hosts, checking for existing inventory first
 def create_inventory_with_hosts(servers, inventory_index):
     inventory_name = f"load_test_group_{inventory_index}"
-    description = "Auto-created inventory for batch server management"
-    payload = {
-        "name": inventory_name,
-        "description": description,
-        "organization": 4  # Adjust as per your organization ID
-    }
-    response = session.post(f"{API_URL}/inventories/", headers=headers, json=payload, verify=False)
-    if response.status_code in [200, 201]:
-        inventory_id = response.json()['id']
-        print(f"Inventory created with ID: {inventory_id} for servers: {', '.join(servers)}")
-        for server in servers:
-            add_host_to_inventory(server, inventory_id)
-        return inventory_id
+    # Check if inventory already exists
+    check_response = session.get(f"{API_URL}/inventories/?name={inventory_name}", headers=headers, verify=False)
+    if check_response.status_code == 200 and check_response.json()['count'] > 0:
+        inventory_id = check_response.json()['results'][0]['id']
+        print(f"Using existing inventory ID {inventory_id} for servers: {', '.join(servers)}")
     else:
-        raise Exception(f"Failed to create inventory for servers: {', '.join(servers)}: {response.text}")
+        # Create new inventory if not existing
+        description = "Auto-created inventory for batch server management"
+        payload = {
+            "name": inventory_name,
+            "description": description,
+            "organization": 4  # Adjust as per your organization ID
+        }
+        create_response = session.post(f"{API_URL}/inventories/", headers=headers, json=payload, verify=False)
+        if create_response.status_code in [200, 201]:
+            inventory_id = create_response.json()['id']
+            print(f"Inventory created with ID: {inventory_id} for servers: {', '.join(servers)}")
+        else:
+            raise Exception(f"Failed to create inventory for servers: {', '.join(servers)}: {create_response.text}")
+
+    # Add hosts to inventory
+    for server in servers:
+        add_host_to_inventory(server, inventory_id)
+    return inventory_id
 
 # Function to add a host to an inventory
 def add_host_to_inventory(server, inventory_id):
